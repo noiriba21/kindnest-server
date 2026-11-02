@@ -1,9 +1,14 @@
-import dns from "node:dns";
-dns.setServers(["8.8.8.8", "1.1.1.1"]);
 import "dotenv/config";
+import dns from "node:dns";
 import express from "express";
 import cors from "cors";
 import { MongoClient, ObjectId } from "mongodb";
+import { jwtVerify, createRemoteJWKSet } from "jose";
+
+// Shudhu "mongodb+srv" link hole DNS fix lage
+if (process.env.MONGODB_URI?.startsWith("mongodb+srv")) {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+}
 
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL }));
@@ -12,13 +17,31 @@ app.use(express.json());
 const client = new MongoClient(process.env.MONGODB_URI);
 const db = client.db("kindnest");
 const events = db.collection("events");
+const joins = db.collection("joins");
 
-// Aajker tarikh, emon dekhte: "2026-11-01"
-const today = () => new Date().toISOString().slice(0, 10);
+// Bangladesh time onujayi aajker tarikh, jemon "2026-11-02"
+const today = () =>
+  new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-app.get("/", (req, res) => {
-  res.send("Kitchen is open!");
-});
+// Wristband (JWT) checker
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+);
+
+async function verifyToken(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) return res.status(401).json({ message: "Please log in first" });
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user = { email: payload.email, name: payload.name };
+    next();
+  } catch (err) {
+    console.log("JWT error:", err.message);
+    res.status(401).json({ message: "Your login expired. Please log in again" });
+  }
+}
+
+app.get("/", (req, res) => res.send("Kitchen is open!"));
 
 app.get("/health", async (req, res) => {
   try {
@@ -30,18 +53,20 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// Shobai dekhte pare: shudhu upcoming events
+// PUBLIC: upcoming events
 app.get("/events", async (req, res) => {
   try {
     const { limit = 0, search = "", type = "" } = req.query;
     const query = { eventDate: { $gte: today() } };
-    if (search) query.title = { $regex: search, $options: "i" };
-    if (type) query.eventType = type;
-
+    if (search) {
+      const safe = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.title = { $regex: safe, $options: "i" };
+    }
+    if (type) query.eventType = String(type);
     const list = await events
       .find(query)
       .sort({ eventDate: 1 })
-      .limit(Number(limit))
+      .limit(Number(limit) || 0)
       .toArray();
     res.json(list);
   } catch (err) {
@@ -50,7 +75,7 @@ app.get("/events", async (req, res) => {
   }
 });
 
-// Ekta event-er details
+// PUBLIC: one event
 app.get("/events/:id", async (req, res) => {
   try {
     if (!ObjectId.isValid(req.params.id)) {
@@ -64,6 +89,8 @@ app.get("/events/:id", async (req, res) => {
     res.status(500).json({ message: "Could not load this event" });
   }
 });
+
+// ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
