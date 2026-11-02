@@ -1,7 +1,9 @@
+import dns from "node:dns";
+dns.setServers(["8.8.8.8", "1.1.1.1"]);
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 const app = express();
 app.use(cors({ origin: process.env.CLIENT_URL }));
@@ -9,12 +11,15 @@ app.use(express.json());
 
 const client = new MongoClient(process.env.MONGODB_URI);
 const db = client.db("kindnest");
+const events = db.collection("events");
+
+// Aajker tarikh, emon dekhte: "2026-11-01"
+const today = () => new Date().toISOString().slice(0, 10);
 
 app.get("/", (req, res) => {
   res.send("Kitchen is open!");
 });
 
-// Fridge connected kina check korar route
 app.get("/health", async (req, res) => {
   try {
     await db.command({ ping: 1 });
@@ -22,6 +27,41 @@ app.get("/health", async (req, res) => {
   } catch (err) {
     console.log(err.message);
     res.status(500).json({ message: "Cannot reach the fridge" });
+  }
+});
+
+// Shobai dekhte pare: shudhu upcoming events
+app.get("/events", async (req, res) => {
+  try {
+    const { limit = 0, search = "", type = "" } = req.query;
+    const query = { eventDate: { $gte: today() } };
+    if (search) query.title = { $regex: search, $options: "i" };
+    if (type) query.eventType = type;
+
+    const list = await events
+      .find(query)
+      .sort({ eventDate: 1 })
+      .limit(Number(limit))
+      .toArray();
+    res.json(list);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not load events" });
+  }
+});
+
+// Ekta event-er details
+app.get("/events/:id", async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "This event id is not valid" });
+    }
+    const event = await events.findOne({ _id: new ObjectId(req.params.id) });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+    res.json(event);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not load this event" });
   }
 });
 
