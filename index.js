@@ -219,6 +219,19 @@ app.post("/events/:id/join", verifyToken, async (req, res) => {
     res.status(500).json({ message: "Could not join the event" });
   }
 });
+// PRIVATE: events I joined, sorted by date
+app.get("/joined", verifyToken, async (req, res) => {
+  try {
+    const list = await joins
+      .find({ userEmail: req.user.email })
+      .sort({ eventDate: 1 })
+      .toArray();
+    res.json(list);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not load joined events" });
+  }
+});
 // ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
