@@ -89,7 +89,58 @@ app.get("/events/:id", async (req, res) => {
     res.status(500).json({ message: "Could not load this event" });
   }
 });
+// ----- helpers for validation -----
+const cleanEvent = (b = {}) => ({
+  title: String(b.title || "").trim(),
+  description: String(b.description || "").trim(),
+  eventType: String(b.eventType || "").trim(),
+  thumbnail: String(b.thumbnail || "").trim(),
+  location: String(b.location || "").trim(),
+  eventDate: String(b.eventDate || "").trim(),
+});
 
+function checkEvent(e) {
+  if (Object.values(e).some((v) => !v)) return "All fields are required";
+  if (e.title.length < 5) return "Title must be at least 5 characters";
+  if (e.description.length < 20) return "Description must be at least 20 characters";
+  if (!/^https?:\/\//.test(e.thumbnail)) return "Thumbnail must be an http or https link";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(e.eventDate)) return "Event date is not valid";
+  if (e.eventDate <= today()) return "Event date must be in the future";
+  return null;
+}
+
+// PRIVATE: create event
+app.post("/events", verifyToken, async (req, res) => {
+  try {
+    const data = cleanEvent(req.body);
+    const problem = checkEvent(data);
+    if (problem) return res.status(400).json({ message: problem });
+    const result = await events.insertOne({
+      ...data,
+      creatorEmail: req.user.email,
+      creatorName: req.user.name,
+      createdAt: new Date(),
+    });
+    res.status(201).json(result);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not create the event" });
+  }
+});
+
+// PRIVATE: my own events
+app.get("/my-events", verifyToken, async (req, res) => {
+  try {
+    const list = await events
+      .find({ creatorEmail: req.user.email })
+      .sort({ eventDate: 1 })
+      .toArray();
+    res.json(list);
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not load your events" });
+  }
+});
 // ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
