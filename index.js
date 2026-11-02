@@ -141,6 +141,49 @@ app.get("/my-events", verifyToken, async (req, res) => {
     res.status(500).json({ message: "Could not load your events" });
   }
 });
+// PRIVATE: update (only the owner)
+app.put("/events/:id", verifyToken, async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "This event id is not valid" });
+    }
+    const data = cleanEvent(req.body);
+    const problem = checkEvent(data);
+    if (problem) return res.status(400).json({ message: problem });
+    const result = await events.updateOne(
+      { _id: new ObjectId(req.params.id), creatorEmail: req.user.email },
+      { $set: data }
+    );
+    if (!result.matchedCount) {
+      return res.status(403).json({ message: "You can only edit your own events" });
+    }
+    res.json({ message: "Event updated" });
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not update the event" });
+  }
+});
+
+// PRIVATE: delete (only the owner)
+app.delete("/events/:id", verifyToken, async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "This event id is not valid" });
+    }
+    const result = await events.deleteOne({
+      _id: new ObjectId(req.params.id),
+      creatorEmail: req.user.email,
+    });
+    if (!result.deletedCount) {
+      return res.status(403).json({ message: "You can only delete your own events" });
+    }
+    await joins.deleteMany({ eventId: req.params.id });
+    res.json({ message: "Event deleted" });
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not delete the event" });
+  }
+});
 // ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
