@@ -184,6 +184,41 @@ app.delete("/events/:id", verifyToken, async (req, res) => {
     res.status(500).json({ message: "Could not delete the event" });
   }
 });
+// PRIVATE: join an event
+app.post("/events/:id/join", verifyToken, async (req, res) => {
+  try {
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: "This event id is not valid" });
+    }
+    const event = await events.findOne({ _id: new ObjectId(req.params.id) });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+    if (event.eventDate < today()) {
+      return res.status(400).json({ message: "This event has already ended" });
+    }
+    const already = await joins.findOne({
+      eventId: req.params.id,
+      userEmail: req.user.email,
+    });
+    if (already) {
+      return res.status(409).json({ message: "You already joined this event" });
+    }
+    await joins.insertOne({
+      eventId: req.params.id,
+      userEmail: req.user.email,
+      userName: req.user.name,
+      title: event.title,
+      thumbnail: event.thumbnail,
+      location: event.location,
+      eventType: event.eventType,
+      eventDate: event.eventDate,
+      joinedAt: new Date(),
+    });
+    res.status(201).json({ message: "Joined!" });
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not join the event" });
+  }
+});
 // ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
