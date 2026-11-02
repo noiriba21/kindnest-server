@@ -232,6 +232,19 @@ app.get("/joined", verifyToken, async (req, res) => {
     res.status(500).json({ message: "Could not load joined events" });
   }
 });
+// PRIVATE: kindness points and badge
+app.get("/impact", verifyToken, async (req, res) => {
+  try {
+    const joined = await joins.countDocuments({ userEmail: req.user.email });
+    const created = await events.countDocuments({ creatorEmail: req.user.email });
+    const points = joined * 10 + created * 20;
+    const badge = points >= 100 ? "🌳 Hero" : points >= 40 ? "🌿 Helper" : "🌱 Seedling";
+    res.json({ joined, created, points, badge });
+  } catch (err) {
+    console.log(err.message);
+    res.status(500).json({ message: "Could not load kindness points" });
+  }
+});
 // ---- NEW ROUTES WILL GO ABOVE THIS LINE ----
 
 const port = process.env.PORT || 5000;
