@@ -2,7 +2,7 @@
 
 Express.js and MongoDB API for KindNest, a social development events platform.
 
-Live site: https://YOUR-LINK.vercel.app
+Live site: https://kindnest-client-mauve.vercel.app/
 
 ## What it does
 - Public routes for upcoming events and event details
